@@ -30,7 +30,7 @@ def load_models():
 
     print("🔄 Loading Whisper large-v3...")
     from faster_whisper import WhisperModel
-    whisper_model = WhisperModel("large-v3", device="cuda", compute_type="float16")
+    whisper_model = WhisperModel("medium", device="cuda", compute_type="float16")
     print("✅ Whisper ready")
 
     print("🔄 Loading Kokoro TTS...")
