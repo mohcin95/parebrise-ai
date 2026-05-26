@@ -31,7 +31,7 @@ fi
 # --- 2. System deps ---
 step "2/8 Installing system dependencies..."
 apt-get update -qq
-apt-get install -y -qq curl wget nodejs npm redis-server postgresql postgresql-contrib ffmpeg supervisor jq zstd > /dev/null 2>&1
+apt-get install -y -qq curl wget redis-server postgresql postgresql-contrib ffmpeg supervisor jq zstd > /dev/null 2>&1
 echo "  done"
 
 # --- 3. Ollama ---
