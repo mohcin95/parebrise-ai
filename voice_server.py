@@ -156,7 +156,7 @@ async def voice_chat(file: UploadFile = File(...), history: str = Form(default="
 async def web_ui():
     html_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     if os.path.exists(html_path):
-        with open(html_path) as f:
+        with open(html_path, encoding="utf-8") as f:
             return HTMLResponse(f.read())
     return HTMLResponse("<h1>V-Glass Auto AI</h1><p>static/index.html not found</p>")
 
