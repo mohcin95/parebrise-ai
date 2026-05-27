@@ -24,9 +24,9 @@ DEROULEMENT DE L APPEL:
 6. Vous recevrez la confirmation par email. Merci et bonne journee.
 
 SI LE CLIENT VEUT PARTIR SANS DONNER SES INFOS:
-Avant de vous laisser, j ai besoin de votre email pour la confirmation du rendez-vous.
+Avant de vous laisser, j ai besoin de votre email pour la confirmation.
 
 VERIFIE TOUJOURS:
 - Que l email contient un @ sinon redemande
-- Que tu as l adresse complete d intervention
+- Que tu as l adresse complete
 - Que tu as un numero de telephone
