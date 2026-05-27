@@ -1,107 +1,119 @@
-# 🔧 V-Glass Auto — AI Voice Agent
+# V-Glass Auto — Voice Agent v3
 
-Full AI agent for a windshield replacement business. Handles voice conversations, appointment scheduling, lead qualification, and client communication — all self-hosted, zero subscription.
-
-## 🎤 Test Version (No Telephony)
-
-Voice chat via browser — no SIP trunk or phone number needed.
-
-```bash
-git clone https://github.com/mohcin95/parebrise-ai.git
-cd parebrise-ai
-chmod +x scripts/install-test.sh
-./scripts/install-test.sh
-```
-
-Open **port 8880** in your browser → talk to the agent.
-
-## 📞 Full Version (With Telephony)
-
-Adds Asterisk SIP, Evolution API (WhatsApp), Cal.com scheduling.
-
-```bash
-chmod +x scripts/install-full.sh
-./scripts/install-full.sh
-```
+AI voice agent for a windshield replacement business. Streaming architecture with ~800ms-1.2s latency to first audio response.
 
 ## Architecture
 
 ```
-🎤 Browser Mic / Téléphone
-       ↓
-🗣️ Faster-Whisper (STT) → texte
-       ↓
-🧠 Qwen3 8B / Llama 70B (Ollama) + mémoire Qdrant
-       ↓
-🔊 Kokoro TTS → audio
-       ↓
-🎧 Réponse vocale dans le browser / téléphone
-
-⚙️ n8n orchestre: planning, confirmations, prospection
+Browser (WebSocket, continuous mic)
+    |  PCM 16kHz int16
+    v
+Silero VAD (end of speech detection, ~100ms)
+    |
+    v
+Whisper large-v3-turbo (STT, ~200ms)
+    |  text
+    v
+vLLM + Qwen3 8B (streaming LLM, ~150ms TTFT)
+    |  sentence chunks
+    v
+vLLM + Orpheus 3B FR (streaming TTS)
+    |  SNAC tokens
+    v
+SNAC decoder (audio, ~10ms)
+    |  PCM 24kHz int16
+    v
+Browser (instant playback)
 ```
 
-## Services
+## Quick Start (RunPod A40 48GB)
 
-| Service | Port | Usage |
-|---------|------|-------|
-| Voice Chat UI | 8880 | Web interface micro + chat |
-| n8n | 5678 | Workflow orchestration |
-| Ollama | 11434 | LLM inference |
-| Qdrant | 6333 | Vector memory |
-| PostgreSQL | 5432 | Database |
-| Redis | 6379 | Cache |
+```bash
+git clone https://github.com/mohcin95/parebrise-ai.git
+cd parebrise-ai
+python3 setup_v3.py
+```
 
-### Full version adds:
-| Service | Port | Usage |
-|---------|------|-------|
-| Evolution API | 8084 | WhatsApp |
-| Cal.com | 3100 | Scheduling |
-| Asterisk | 5060 | SIP telephony |
+Open **port 8880** in RunPod settings, then open the URL in your browser.
 
-## Hardware
+## VRAM Usage
 
-- **Minimum**: 16GB VRAM (Qwen3 8B + Whisper + Kokoro)
-- **Recommended**: 48GB VRAM (Llama 70B Q4 + everything)
-- **Tested on**: NVIDIA A40 48GB / RunPod
+| Service | VRAM |
+|---------|------|
+| vLLM Qwen3 8B (30%) | ~14GB |
+| vLLM Orpheus 3B FR (20%) | ~10GB |
+| Whisper large-v3-turbo | ~2GB |
+| SNAC decoder | ~0.5GB |
+| Silero VAD | ~0.1GB |
+| **Total** | **~27GB / 48GB** |
 
-## VRAM Budget (A40 48GB)
+## Files
 
-| Mode | Model | VRAM |
-|------|-------|------|
-| Fast | Qwen3 8B + Whisper + Kokoro | ~13GB |
-| Heavy | Llama 70B Q4 + Whisper + Kokoro | ~47GB |
+```
+parebrise-ai/
+├── setup_v3.py          # One-click installer
+├── start.sh             # Launch all services
+├── stop.sh              # Stop all services
+├── voice_agent.py       # WebSocket voice pipeline
+├── orpheus_tts.py       # Orpheus TTS + SNAC streaming decoder
+├── static/index.html    # Browser client
+├── prompts/inbound.txt  # Agent personality + script
+└── logs/                # Service logs
+```
 
-Dynamic loading: only 1 LLM at a time, auto-swap in ~15s.
+## Ports
+
+| Port | Service |
+|------|---------|
+| 8880 | Voice Chat UI |
+| 8000 | vLLM Qwen3 8B API |
+| 8001 | vLLM Orpheus TTS API |
 
 ## Commands
 
 ```bash
-# Service management
-supervisorctl status
-supervisorctl restart voice
-supervisorctl tail -f voice
+# Start
+bash start.sh
 
-# Test TTS
-curl http://localhost:8880/speak -H 'Content-Type: application/json' \
-  -d '{"input":"Bonjour, V-Glass Auto"}' -o test.wav
+# Stop
+bash stop.sh
+
+# Logs
+tail -f logs/voice-agent.log
+tail -f logs/vllm-qwen.log
+tail -f logs/vllm-orpheus.log
+
+# Check GPU
+nvidia-smi
 
 # Test LLM
-curl http://localhost:11434/api/chat \
-  -d '{"model":"qwen3:8b","messages":[{"role":"user","content":"Salut"}]}'
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"Qwen/Qwen3-8B","messages":[{"role":"user","content":"Bonjour"}],"max_tokens":50}'
 
-# Test STT
-curl http://localhost:8880/listen -F file=@test.wav
-
-# Pull heavy model when needed
-ollama pull llama3:70b-instruct-q4_K_M
+# Test TTS
+curl http://localhost:8001/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"canopylabs/3b-fr-ft-research_release","prompt":"tara: Bonjour","max_tokens":100}'
 ```
 
-## Configuration
+## Troubleshooting
 
-Edit `data/config.json` for your business info, technician details, and pricing.
-Edit `prompts/*.txt` for AI agent behavior.
-Edit `data/prospects.csv` for outbound call lists.
+### vLLM won't start
+```bash
+cat logs/vllm-qwen.log | tail -30
+cat logs/vllm-orpheus.log | tail -30
+```
 
-## License
+### Voice agent crashes
+```bash
+cat logs/voice-agent.log | tail -30
+```
 
-MIT
+### Out of VRAM
+Reduce gpu-memory-utilization in start.sh (currently 0.30 + 0.20 = 50%)
+
+### No audio in browser
+- Check that URL is HTTPS (RunPod proxy handles this)
+- Allow microphone access when browser asks
+- Try Chrome instead of Safari

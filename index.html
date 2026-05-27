@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>V-Glass Auto</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0f1a;color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column}
+.hdr{background:linear-gradient(135deg,#111827,#0a0f1a);padding:18px;text-align:center;border-bottom:1px solid #1e293b}
+.hdr h1{font-size:22px;color:#60a5fa;font-weight:700;letter-spacing:.5px}
+.hdr p{color:#64748b;font-size:12px;margin-top:3px}
+.chat{flex:1;overflow-y:auto;padding:16px;max-width:700px;margin:0 auto;width:100%}
+.msg{margin:8px 0;padding:12px 16px;border-radius:14px;max-width:82%;line-height:1.5;font-size:14px;animation:fadeUp .25s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.u{background:#2563eb;margin-left:auto;border-bottom-right-radius:4px}
+.msg.a{background:#1e293b;border:1px solid #334155;border-bottom-left-radius:4px}
+.msg .lb{font-size:10px;color:rgba(255,255,255,.35);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.bar{background:#111827;padding:14px;border-top:1px solid #1e293b;display:flex;flex-direction:column;align-items:center;gap:10px}
+.mic-row{display:flex;align-items:center;gap:12px}
+#status{color:#64748b;font-size:12px;min-width:140px;text-align:center;transition:color .2s}
+#status.active{color:#34d399}
+#status.thinking{color:#fbbf24}
+#btn{width:64px;height:64px;border-radius:50%;border:3px solid #2563eb;background:transparent;color:#2563eb;font-size:26px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
+#btn:hover{background:rgba(37,99,235,.12);transform:scale(1.04)}
+#btn.on{background:#dc2626;border-color:#dc2626;color:#fff;animation:glow 1.5s infinite}
+#btn:disabled{opacity:.25;cursor:not-allowed;transform:none}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.3)}50%{box-shadow:0 0 0 10px rgba(220,38,38,0)}}
+.txt-row{display:flex;gap:8px;width:100%;max-width:700px}
+.txt-row input{flex:1;background:#0a0f1a;border:1px solid #1e293b;color:#e2e8f0;padding:10px 14px;border-radius:10px;font-size:14px;outline:none}
+.txt-row input:focus{border-color:#2563eb}
+.txt-row button{background:#2563eb;color:#fff;border:none;padding:10px 18px;border-radius:10px;cursor:pointer;font-weight:600;font-size:14px}
+.welcome{text-align:center;padding:40px 20px;color:#475569}
+.welcome p{font-size:14px;max-width:360px;margin:0 auto;line-height:1.6}
+.latency{font-size:10px;color:#475569;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="hdr">
+<h1>V-Glass Auto</h1>
+<p>Agent vocal streaming v3</p>
+</div>
+
+<div class="chat" id="chat">
+<div class="welcome" id="welcome">
+<p>Appuie sur le micro pour parler avec l'agent V-Glass Auto. La conversation est en temps reel.</p>
+</div>
+</div>
+
+<div class="bar">
+<div class="mic-row">
+<span id="status">Connexion...</span>
+<button id="btn" disabled onclick="toggle()">&#x1F3A4;</button>
+</div>
+<div class="txt-row">
+<input id="tin" placeholder="Ou tape ici..." onkeypress="if(event.key==='Enter')sendTxt()" disabled>
+<button onclick="sendTxt()">Envoyer</button>
+</div>
+<div class="latency" id="lat"></div>
+</div>
+
+<script>
+const chat=document.getElementById('chat');
+const btn=document.getElementById('btn');
+const sts=document.getElementById('status');
+const lat=document.getElementById('lat');
+let ws,ctx,src,proc,stream,active=false;
+let audioQueue=[],playing=false,history=[];
+
+// ---- WebSocket ----
+function connect(){
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  ws=new WebSocket(proto+'//'+location.host+'/ws');
+  ws.binaryType='arraybuffer';
+
+  ws.onopen=()=>{
+    sts.textContent='Pret';
+    sts.className='';
+    btn.disabled=false;
+    document.getElementById('tin').disabled=false;
+  };
+
+  ws.onmessage=(e)=>{
+    if(typeof e.data==='string'){
+      const d=JSON.parse(e.data);
+      handle(d);
+    }
+  };
+
+  ws.onclose=()=>{
+    sts.textContent='Reconnexion...';
+    btn.disabled=true;
+    setTimeout(connect,2000);
+  };
+
+  ws.onerror=()=>{ws.close()};
+}
+
+function handle(d){
+  if(d.type==='ready'){
+    sts.textContent='Pret';sts.className='';
+  }
+  else if(d.type==='status'){
+    sts.textContent=d.text;
+    sts.className=d.text.includes('Pret')?'':'thinking';
+  }
+  else if(d.type==='user_text'){
+    addMsg(d.text,'u');
+  }
+  else if(d.type==='ai_text_chunk'){
+    let el=document.getElementById('cur');
+    if(!el){
+      el=document.createElement('div');
+      el.className='msg a';el.id='cur';
+      el.innerHTML='<div class="lb">Agent</div><span id="curtxt"></span>';
+      chat.appendChild(el);
+    }
+    document.getElementById('curtxt').textContent+=d.text+' ';
+    chat.scrollTop=chat.scrollHeight;
+  }
+  else if(d.type==='audio_chunk'){
+    // Decode base64 PCM int16 24kHz and queue for playback
+    const raw=atob(d.audio);
+    const buf=new ArrayBuffer(raw.length);
+    const view=new Uint8Array(buf);
+    for(let i=0;i<raw.length;i++) view[i]=raw.charCodeAt(i);
+    const int16=new Int16Array(buf);
+    const float32=new Float32Array(int16.length);
+    for(let i=0;i<int16.length;i++) float32[i]=int16[i]/32768;
+    audioQueue.push(float32);
+    if(!playing) playNext();
+  }
+  else if(d.type==='done'){
+    const el=document.getElementById('cur');
+    if(el) el.removeAttribute('id');
+    if(document.getElementById('curtxt')){
+      document.getElementById('curtxt').removeAttribute('id');
+    }
+    sts.textContent='Pret';sts.className='';
+    if(d.latency_stt) lat.textContent='STT: '+d.latency_stt+'s';
+    btn.disabled=false;
+  }
+  else if(d.type==='interrupted'){
+    audioQueue=[];playing=false;
+    sts.textContent='Pret';sts.className='';
+  }
+}
+
+// ---- Audio Playback ----
+const actx=new (window.AudioContext||window.webkitAudioContext)({sampleRate:24000});
+
+function playNext(){
+  if(audioQueue.length===0){playing=false;return}
+  playing=true;
+  const samples=audioQueue.shift();
+  const abuf=actx.createBuffer(1,samples.length,24000);
+  abuf.getChannelData(0).set(samples);
+  const src=actx.createBufferSource();
+  src.buffer=abuf;
+  src.connect(actx.destination);
+  src.onended=playNext;
+  src.start();
+}
+
+// ---- Mic Capture ----
+async function startMic(){
+  stream=await navigator.mediaDevices.getUserMedia({
+    audio:{sampleRate:16000,channelCount:1,echoCancellation:true,noiseSuppression:true}
+  });
+  ctx=new AudioContext({sampleRate:16000});
+  src=ctx.createMediaStreamSource(stream);
+  proc=ctx.createScriptProcessor(4096,1,1);
+  proc.onaudioprocess=(e)=>{
+    if(!active||!ws||ws.readyState!==1) return;
+    const f32=e.inputBuffer.getChannelData(0);
+    // Convert float32 to int16
+    const i16=new Int16Array(f32.length);
+    for(let i=0;i<f32.length;i++){
+      let s=Math.max(-1,Math.min(1,f32[i]));
+      i16[i]=s<0?s*0x8000:s*0x7FFF;
+    }
+    ws.send(i16.buffer);
+  };
+  src.connect(proc);
+  proc.connect(ctx.destination);
+}
+
+function stopMic(){
+  if(proc){proc.disconnect();proc=null}
+  if(src){src.disconnect();src=null}
+  if(ctx){ctx.close();ctx=null}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+}
+
+async function toggle(){
+  // Resume audio context on user gesture (browser policy)
+  if(actx.state==='suspended') await actx.resume();
+
+  if(!active){
+    await startMic();
+    active=true;
+    btn.classList.add('on');
+    sts.textContent='Ecoute...';
+    sts.className='active';
+  } else {
+    active=false;
+    stopMic();
+    btn.classList.remove('on');
+    sts.textContent='Pret';
+    sts.className='';
+  }
+}
+
+// ---- Text fallback ----
+async function sendTxt(){
+  const inp=document.getElementById('tin');
+  const t=inp.value.trim();if(!t)return;
+  inp.value='';
+  addMsg(t,'u');
+  try{
+    const r=await fetch('/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:t,history:history})
+    });
+    const d=await r.json();
+    addMsg(d.response,'a');
+    history.push({role:'user',content:t},{role:'assistant',content:d.response});
+  }catch(e){addMsg('Erreur: '+e.message,'a')}
+}
+
+function addMsg(t,r){
+  const w=document.getElementById('welcome');if(w)w.remove();
+  const d=document.createElement('div');
+  d.className='msg '+r;
+  d.innerHTML='<div class="lb">'+(r==='u'?'Vous':'Agent')+'</div>'+t.replace(/\n/g,'<br>');
+  chat.appendChild(d);
+  chat.scrollTop=chat.scrollHeight;
+}
+
+// ---- Init ----
+connect();
+</script>
+</body>
+</html>
