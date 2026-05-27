@@ -1,0 +1,41 @@
+{
+  "entreprise": {
+    "nom": "V-Glass Auto",
+    "telephone": "+33XXXXXXXXX",
+    "email": "contact@v-glass-auto.fr",
+    "siret": "",
+    "ape": "4532Z"
+  },
+  "techniciens": [
+    {
+      "id": "tech_01",
+      "nom": "Technicien 1",
+      "telephone": "+33XXXXXXXXX",
+      "zone": "Île-de-France",
+      "certifications": ["IBAC"],
+      "horaires": {
+        "lundi": {"debut": "08:00", "fin": "18:00"},
+        "mardi": {"debut": "08:00", "fin": "18:00"},
+        "mercredi": {"debut": "08:00", "fin": "18:00"},
+        "jeudi": {"debut": "08:00", "fin": "18:00"},
+        "vendredi": {"debut": "08:00", "fin": "18:00"},
+        "samedi": {"debut": "09:00", "fin": "14:00"},
+        "dimanche": null
+      },
+      "pause_dejeuner": "12:00-13:00",
+      "max_interventions_jour": 5
+    }
+  ],
+  "interventions": {
+    "remplacement": {"duree_minutes": 90, "prix_min": 250, "prix_max": 800}
+  },
+  "regles_planning": {
+    "temps_trajet_min_minutes": 30,
+    "creneaux_urgence_par_jour": 1,
+    "delai_rappel_heures": 24
+  },
+  "assurances_partenaires": [
+    "AXA", "MAIF", "MACIF", "Groupama", "Allianz",
+    "Matmut", "GMF", "MAAF", "Generali", "MMA"
+  ]
+}
